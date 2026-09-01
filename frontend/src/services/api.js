@@ -1,8 +1,10 @@
 import axios from 'axios';
 
 // Base API instance
+const apiBaseURL = import.meta.env.VITE_API_BASE_URL || '/api';
+
 const api = axios.create({
-  baseURL: '/api',
+  baseURL: apiBaseURL,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -39,7 +41,7 @@ api.interceptors.response.use(
 
       if (refreshToken) {
         try {
-          const res = await axios.post('/api/auth/refresh/', { refresh: refreshToken });
+          const res = await axios.post(`${apiBaseURL}/auth/refresh/`, { refresh: refreshToken });
           const newAccessToken = res.data.access;
 
           localStorage.setItem('smart_queue_access_token', newAccessToken);
