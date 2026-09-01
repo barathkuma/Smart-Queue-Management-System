@@ -1,0 +1,26 @@
+# Node / React
+frontend/node_modules/
+frontend/dist/
+
+# Python
+__pycache__/
+*.py[cod]
+venv/
+.venv/
+env/
+
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Django-generated files
+db.sqlite3
+media/
+staticfiles/
+
+# Editor / system files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
