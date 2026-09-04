@@ -24,3 +24,6 @@ staticfiles/
 .idea/
 .DS_Store
 Thumbs.db
+# Playwright test output
+frontend/playwright-report/
+frontend/test-results/

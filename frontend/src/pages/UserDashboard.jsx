@@ -1,60 +1,74 @@
 import React, { useEffect, useState } from 'react';
-import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
-import {
-  Clock,
-  Sparkles,
-  Ticket,
-  Users,
-  Bell,
-  CheckCircle2,
-  XCircle,
-  RefreshCw
-} from 'lucide-react';
 
-export const UserDashboard = () => {
-  const { user } = useAuth();
-
+const UserDashboard = () => {
   const [services, setServices] = useState([]);
-  const [myToken, setMyToken] = useState(null);
+  const [activeToken, setActiveToken] = useState(null);
   const [queueStatus, setQueueStatus] = useState(null);
   const [history, setHistory] = useState([]);
 
   const [loading, setLoading] = useState(true);
   const [joining, setJoining] = useState(false);
-  const [cancelling, setCancelling] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
 
-  // Load all dashboard data
+  // Load dashboard data
   const loadDashboard = async () => {
     try {
+      setLoading(true);
       setError('');
 
-      const [servicesResponse, tokenResponse, statusResponse, historyResponse] =
-        await Promise.all([
+      const [servicesRes, tokenRes, statusRes, historyRes] =
+        await Promise.allSettled([
           api.get('/services/'),
           api.get('/queue/my-token/'),
           api.get('/queue/status/'),
-          api.get('/queue/history/')
+          api.get('/queue/history/'),
         ]);
 
-      setServices(servicesResponse.data || []);
-      setMyToken(tokenResponse.data || null);
-      setQueueStatus(statusResponse.data || null);
-      setHistory(historyResponse.data || []);
+      // Services
+      if (servicesRes.status === 'fulfilled') {
+        const data = servicesRes.value.data;
+        if (Array.isArray(data)) {
+          setServices(data);
+        } else if (data && Array.isArray(data.results)) {
+          setServices(data.results);
+        } else {
+          setServices([]);
+        }
+      }
+
+      // Active token
+      if (tokenRes.status === 'fulfilled') {
+        const data = tokenRes.value.data;
+        // The API returns { "active_token": { ... } } or { "active_token": null }
+        if (data && data.active_token) {
+          setActiveToken(data.active_token);
+        } else {
+          setActiveToken(null);
+        }
+      }
+
+      // Queue status
+      if (statusRes.status === 'fulfilled') {
+        setQueueStatus(statusRes.value.data);
+      }
+
+      // History
+      if (historyRes.status === 'fulfilled') {
+        const data = historyRes.value.data;
+        // API returns { "count": X, "history": [ ... ] }
+        if (data && Array.isArray(data.history)) {
+          setHistory(data.history);
+        } else if (Array.isArray(data)) {
+          setHistory(data);
+        } else {
+          setHistory([]);
+        }
+      }
     } catch (err) {
       console.error('Dashboard loading error:', err);
-
-      // No active token is a normal situation
-      if (err.response?.status === 404) {
-        setMyToken(null);
-      } else {
-        setError(
-          err.response?.data?.detail ||
-          'Unable to load dashboard data.'
-        );
-      }
+      setError('Unable to load dashboard data.');
     } finally {
       setLoading(false);
     }
@@ -63,67 +77,81 @@ export const UserDashboard = () => {
   useEffect(() => {
     loadDashboard();
 
-    // Refresh queue information every 5 seconds
     const interval = setInterval(() => {
-      loadDashboard();
+      updateLiveStatus();
     }, 5000);
 
     return () => clearInterval(interval);
   }, []);
 
-  // Join a service queue
-  const joinQueue = async (serviceId) => {
+  // Specialized function for live updates to avoid reloading everything (like history)
+  const updateLiveStatus = async () => {
     try {
-      setJoining(true);
-      setError('');
-      setMessage('');
+      const [tokenRes, statusRes] = await Promise.allSettled([
+        api.get('/queue/my-token/'),
+        api.get('/queue/status/'),
+      ]);
 
-      const response = await api.post('/queue/join/', {
-        service_id: serviceId
-      });
+      if (tokenRes.status === 'fulfilled') {
+        const data = tokenRes.value.data;
+        if (data && data.active_token) {
+          setActiveToken(data.active_token);
+        } else {
+          setActiveToken(null);
+        }
+      }
 
-      setMessage(
-        response.data?.message ||
-        'Successfully joined the queue!'
-      );
-
-      await loadDashboard();
+      if (statusRes.status === 'fulfilled') {
+        setQueueStatus(statusRes.value.data);
+      }
     } catch (err) {
-      console.error('Join queue error:', err);
-
-      setError(
-        err.response?.data?.detail ||
-        err.response?.data?.message ||
-        'Unable to join the queue.'
-      );
-    } finally {
-      setJoining(false);
+      console.error('Live update error:', err);
     }
   };
 
-  // Cancel current token
+    const joinQueue = async (serviceId) => {
+      try {
+        setJoining(true);
+        setMessage('');
+        setError('');
+
+        const response = await api.post('/queue/join/', {
+          service_id: serviceId,
+        });
+
+        // Backend returns: { "message": "...", "token": { ... }, "token_number": "...", ... }
+        const newToken = response.data.token;
+        if (newToken) {
+          setActiveToken(newToken);
+        }
+
+        setMessage(response.data.message || 'Successfully joined the queue!');
+
+        await loadDashboard();
+      } catch (err) {
+        console.error('Join queue error:', err);
+
+        const detail =
+          err.response?.data?.detail ||
+          err.response?.data?.message ||
+          'Unable to join the queue.';
+
+        setError(detail);
+      } finally {
+        setJoining(false);
+      }
+    };
+
+  // Cancel queue
   const cancelQueue = async () => {
-    if (!myToken) return;
-
-    const confirmed = window.confirm(
-      `Are you sure you want to cancel token ${myToken.token_number}?`
-    );
-
-    if (!confirmed) return;
-
     try {
-      setCancelling(true);
       setError('');
       setMessage('');
 
-      const response = await api.post('/queue/cancel/', {
-        token_id: myToken.id
-      });
+      await api.post('/queue/cancel/');
 
-      setMessage(
-        response.data?.message ||
-        'Your queue token has been cancelled.'
-      );
+      setActiveToken(null);
+      setMessage('Your queue token has been cancelled.');
 
       await loadDashboard();
     } catch (err) {
@@ -131,36 +159,22 @@ export const UserDashboard = () => {
 
       setError(
         err.response?.data?.detail ||
-        err.response?.data?.message ||
-        'Unable to cancel the queue.'
+          err.response?.data?.message ||
+          'Unable to cancel your token.'
       );
-    } finally {
-      setCancelling(false);
     }
   };
 
-  const activeToken =
-    myToken &&
-    ['WAITING', 'CALLED', 'SERVING'].includes(myToken.status);
-
-  const peopleAhead = myToken?.people_ahead ?? 0;
-
-  const estimatedWait = myToken?.estimated_wait_time ?? 0;
-
-  const statusText = myToken?.status || 'NO ACTIVE TOKEN';
-
-  const progress =
-    activeToken && peopleAhead >= 0
-      ? Math.max(5, Math.min(100, 100 - peopleAhead * 15))
-      : 0;
-
   if (loading) {
     return (
-      <div className="max-w-7xl mx-auto px-4 py-12">
-        <div className="glass-card p-10 text-center">
-          <RefreshCw className="w-8 h-8 text-indigo-400 animate-spin mx-auto mb-4" />
-          <p className="text-slate-300">
-            Loading your queue dashboard...
+      <div className="min-h-screen bg-gray-50 p-8">
+        <div className="mx-auto max-w-6xl">
+          <h1 className="text-3xl font-bold text-gray-900">
+            User Dashboard
+          </h1>
+
+          <p className="mt-4 text-gray-600">
+            Loading dashboard...
           </p>
         </div>
       </div>
@@ -168,452 +182,277 @@ export const UserDashboard = () => {
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div className="min-h-screen bg-gray-50 p-6">
+      <div className="mx-auto max-w-6xl">
 
-      {/* Header */}
-      <div className="glass-card p-6 sm:p-8 mb-8 border-indigo-500/20 bg-gradient-to-r from-slate-900/90 via-indigo-950/40 to-slate-900/90">
+        {/* Header */}
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold text-gray-900">
+            User Dashboard
+          </h1>
 
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-
-          <div>
-            <div className="flex items-center gap-2 mb-2">
-              <span className="badge-user">
-                <Sparkles className="w-3 h-3" />
-                Customer Portal
-              </span>
-
-              <span className="text-xs text-slate-400">
-                Live Queue
-              </span>
-            </div>
-
-            <h1 className="text-2xl sm:text-3xl font-extrabold text-white">
-              Hello, {user?.name || 'Customer'}! 👋
-            </h1>
-
-            <p className="text-slate-300 text-sm mt-1">
-              Join a queue and track your position in real time.
-            </p>
-          </div>
-
-          <button
-            onClick={loadDashboard}
-            className="btn-secondary text-xs !py-2.5 !px-4"
-          >
-            <RefreshCw className="w-4 h-4 mr-1.5" />
-            Refresh
-          </button>
-
+          <p className="mt-2 text-gray-600">
+            Manage your queue and check your waiting status.
+          </p>
         </div>
-      </div>
 
-      {/* Messages */}
-      {message && (
-        <div className="mb-6 p-4 rounded-xl border border-emerald-500/30 bg-emerald-500/10 text-emerald-300 text-sm">
-          <div className="flex items-center gap-2">
-            <CheckCircle2 className="w-5 h-5" />
+        {/* Messages */}
+        {message && (
+          <div className="mb-6 rounded-lg bg-green-100 p-4 text-green-800">
             {message}
           </div>
-        </div>
-      )}
+        )}
 
-      {error && (
-        <div className="mb-6 p-4 rounded-xl border border-red-500/30 bg-red-500/10 text-red-300 text-sm">
-          {error}
-        </div>
-      )}
-
-      {/* Metrics */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
-
-        {/* Token */}
-        <div className="glass-card p-5 border-slate-800">
-          <div className="flex items-center justify-between text-slate-400 mb-2">
-            <span className="text-xs font-semibold uppercase">
-              Active Token
-            </span>
-            <Ticket className="w-4 h-4 text-cyan-400" />
+        {error && (
+          <div className="mb-6 rounded-lg bg-red-100 p-4 text-red-800">
+            {error}
           </div>
+        )}
 
-          <div className="text-2xl font-extrabold text-white">
-            {activeToken ? myToken.token_number : 'None'}
-          </div>
+        {/* Active Token */}
+        <div className="mb-8 rounded-xl bg-white p-6 shadow">
+          <h2 className="mb-4 text-xl font-semibold text-gray-900">
+            My Active Token
+          </h2>
 
-          <p className="text-xs text-cyan-300/80 mt-1">
-            {activeToken
-              ? `${peopleAhead} people ahead`
-              : 'No active queue'}
-          </p>
-        </div>
+          {activeToken ? (
+            <div className="grid gap-4 md:grid-cols-3">
 
-        {/* Wait */}
-        <div className="glass-card p-5 border-slate-800">
-          <div className="flex items-center justify-between text-slate-400 mb-2">
-            <span className="text-xs font-semibold uppercase">
-              Est. Wait Time
-            </span>
-
-            <Clock className="w-4 h-4 text-indigo-400" />
-          </div>
-
-          <div className="text-2xl font-extrabold text-indigo-400">
-            {activeToken ? `${estimatedWait} min` : '--'}
-          </div>
-
-          <p className="text-xs text-slate-400 mt-1">
-            Based on current queue
-          </p>
-        </div>
-
-        {/* People */}
-        <div className="glass-card p-5 border-slate-800">
-          <div className="flex items-center justify-between text-slate-400 mb-2">
-            <span className="text-xs font-semibold uppercase">
-              People Ahead
-            </span>
-
-            <Users className="w-4 h-4 text-emerald-400" />
-          </div>
-
-          <div className="text-2xl font-extrabold text-emerald-400">
-            {activeToken ? peopleAhead : 0}
-          </div>
-
-          <p className="text-xs text-slate-400 mt-1">
-            In your selected queue
-          </p>
-        </div>
-
-        {/* Status */}
-        <div className="glass-card p-5 border-slate-800">
-          <div className="flex items-center justify-between text-slate-400 mb-2">
-            <span className="text-xs font-semibold uppercase">
-              Queue Status
-            </span>
-
-            <Bell className="w-4 h-4 text-purple-400" />
-          </div>
-
-          <div className="text-xl font-extrabold text-purple-400">
-            {statusText}
-          </div>
-
-          <p className="text-xs text-slate-400 mt-1">
-            Live status
-          </p>
-        </div>
-
-      </div>
-
-      {/* Main Content */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-
-        {/* Current Ticket */}
-        <div className="lg:col-span-2 space-y-6">
-
-          <div className="glass-card p-6 border-indigo-500/30">
-
-            <div className="flex items-center justify-between border-b border-slate-800 pb-4 mb-5">
-
-              <div>
-                <span className="text-xs font-bold text-indigo-400 uppercase tracking-wider">
-                  Current Ticket
-                </span>
-
-                <h3 className="text-lg font-bold text-white mt-1">
-                  {activeToken
-                    ? myToken.service_name ||
-                      myToken.service?.name ||
-                      'Selected Service'
-                    : 'No Active Queue'}
-                </h3>
-              </div>
-
-              {activeToken && (
-                <span className="badge-user">
-                  {myToken.status}
-                </span>
-              )}
-
-            </div>
-
-            {activeToken ? (
-              <>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-
-                  <div className="bg-slate-950 p-4 rounded-xl border border-slate-800">
-                    <p className="text-xs text-slate-400">
-                      Your Number
-                    </p>
-
-                    <p className="text-3xl font-extrabold text-cyan-400 mt-1">
-                      {myToken.token_number}
-                    </p>
-                  </div>
-
-                  <div className="bg-slate-950 p-4 rounded-xl border border-slate-800">
-                    <p className="text-xs text-slate-400">
-                      People Ahead
-                    </p>
-
-                    <p className="text-3xl font-extrabold text-indigo-400 mt-1">
-                      {peopleAhead}
-                    </p>
-                  </div>
-
-                  <div className="bg-slate-950 p-4 rounded-xl border border-slate-800">
-                    <p className="text-xs text-slate-400">
-                      Counter
-                    </p>
-
-                    <p className="text-xl font-extrabold text-emerald-400 mt-3">
-                      {myToken.counter_number || 'Not assigned'}
-                    </p>
-                  </div>
-
-                </div>
-
-                {/* Progress */}
-                <div className="space-y-2">
-
-                  <div className="flex justify-between text-xs text-slate-300 font-medium">
-                    <span>Progress to Counter</span>
-
-                    <span className="text-indigo-400">
-                      {progress}%
-                    </span>
-                  </div>
-
-                  <div className="w-full bg-slate-950 rounded-full h-3 overflow-hidden border border-slate-800">
-
-                    <div
-                      className="bg-gradient-to-r from-indigo-500 via-purple-500 to-cyan-400 h-3 rounded-full transition-all duration-700"
-                      style={{ width: `${progress}%` }}
-                    />
-
-                  </div>
-
-                  <p className="text-xs text-slate-400 pt-2">
-                    {myToken.status === 'CALLED'
-                      ? 'Your token has been called. Please approach the counter.'
-                      : myToken.status === 'SERVING'
-                      ? 'Your service is currently being handled.'
-                      : `${peopleAhead} people are ahead of you.`}
-                  </p>
-
-                </div>
-
-                {/* Cancel */}
-                {myToken.status === 'WAITING' && (
-                  <button
-                    onClick={cancelQueue}
-                    disabled={cancelling}
-                    className="mt-6 w-full sm:w-auto btn-secondary !border-red-500/30 !text-red-400"
-                  >
-                    <XCircle className="w-4 h-4 mr-2" />
-
-                    {cancelling
-                      ? 'Cancelling...'
-                      : 'Cancel Queue'}
-                  </button>
-                )}
-
-              </>
-            ) : (
-              <div className="text-center py-10">
-
-                <Ticket className="w-12 h-12 text-slate-600 mx-auto mb-4" />
-
-                <h3 className="text-lg font-bold text-white">
-                  You are not currently in a queue
-                </h3>
-
-                <p className="text-sm text-slate-400 mt-2">
-                  Select a service below to get your token.
+              <div className="rounded-lg bg-blue-50 p-5">
+                <p className="text-sm text-gray-500">
+                  Token Number
                 </p>
 
+                <p className="mt-2 text-4xl font-bold text-blue-600">
+                  {activeToken.token_number ||
+                    activeToken.token ||
+                    activeToken.number ||
+                    '—'}
+                </p>
               </div>
-            )}
 
-          </div>
+              <div className="rounded-lg bg-gray-50 p-5">
+                <p className="text-sm text-gray-500">
+                  People Ahead
+                </p>
 
-          {/* Services */}
-          <div className="glass-card p-6">
+                <p className="mt-2 text-3xl font-bold text-gray-900">
+                  {activeToken.people_ahead ?? 0}
+                </p>
+              </div>
 
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-base font-bold text-white">
-                Available Services
-              </h3>
+              <div className="rounded-lg bg-gray-50 p-5">
+                <p className="text-sm text-gray-500">
+                  Estimated Wait
+                </p>
 
-              <span className="text-xs text-slate-400">
-                {services.length} services
-              </span>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-
-              {services.map((service) => (
-
-                <div
-                  key={service.id}
-                  className="p-4 rounded-xl bg-slate-950/80 border border-slate-800 hover:border-indigo-500/40 transition-all"
-                >
-
-                  <div className="flex items-center justify-between gap-3">
-
-                    <div>
-                      <h4 className="text-sm font-semibold text-white">
-                        {service.name}
-                      </h4>
-
-                      <p className="text-xs text-slate-400 mt-1">
-                        {service.description ||
-                          'Queue service available'}
-                      </p>
-
-                      <p className="text-xs text-indigo-400 mt-2">
-                        Avg. service time: {
-                          service.average_service_time
-                        } min
-                      </p>
-
-                      <p className="text-xs text-slate-500 mt-1">
-                        {service.active_tokens_count || 0} currently waiting
-                      </p>
-                    </div>
-
-                    <button
-                      onClick={() => joinQueue(service.id)}
-                      disabled={joining || activeToken}
-                      className="btn-secondary !text-xs !py-1.5 !px-3 disabled:opacity-40"
-                    >
-                      {joining ? 'Joining...' : 'Join'}
-                    </button>
-
-                  </div>
-
-                </div>
-
-              ))}
+                <p className="mt-2 text-3xl font-bold text-gray-900">
+                  {activeToken.estimated_wait_time ??
+                    activeToken.wait_time ??
+                    0}{' '}
+                  min
+                </p>
+              </div>
 
             </div>
+          ) : (
+            <div className="rounded-lg bg-gray-50 p-6 text-center">
+              <p className="text-gray-600">
+                You don't have an active queue token.
+              </p>
+            </div>
+          )}
 
-          </div>
-
+          {activeToken && (
+            <button
+              onClick={cancelQueue}
+              className="mt-5 rounded-lg bg-red-600 px-5 py-2 text-white hover:bg-red-700"
+            >
+              Cancel Token
+            </button>
+          )}
         </div>
 
-        {/* Right Side */}
-        <div className="space-y-6">
+        {/* Queue Status */}
+        <div className="mb-8 rounded-xl bg-white p-6 shadow">
+          <h2 className="mb-4 text-xl font-semibold text-gray-900">
+            Queue Status
+          </h2>
 
-          {/* Profile */}
-          <div className="glass-card p-6">
+          {queueStatus && activeToken ? (
+            (() => {
+              const myService = queueStatus.services?.find(
+                (s) => s.id === activeToken.service_id || s.id === activeToken.service?.id
+              );
 
-            <h3 className="text-sm font-bold text-white mb-4">
-              Account Profile
-            </h3>
+              if (!myService) return <p className="text-gray-500">Service status unavailable.</p>;
 
-            <div className="space-y-3 text-xs">
-
-              <div className="flex justify-between py-2 border-b border-slate-800">
-                <span className="text-slate-400">
-                  Full Name
-                </span>
-
-                <span className="text-slate-200 font-semibold">
-                  {user?.name}
-                </span>
-              </div>
-
-              <div className="flex justify-between py-2 border-b border-slate-800">
-                <span className="text-slate-400">
-                  Email
-                </span>
-
-                <span className="text-slate-200 font-semibold">
-                  {user?.email}
-                </span>
-              </div>
-
-              <div className="flex justify-between py-2 border-b border-slate-800">
-                <span className="text-slate-400">
-                  Phone
-                </span>
-
-                <span className="text-slate-200 font-semibold">
-                  {user?.phone || 'Not provided'}
-                </span>
-              </div>
-
-              <div className="flex justify-between py-2">
-                <span className="text-slate-400">
-                  Role
-                </span>
-
-                <span className="badge-user">
-                  {user?.role}
-                </span>
-              </div>
-
-            </div>
-
-          </div>
-
-          {/* Queue History */}
-          <div className="glass-card p-6">
-
-            <h3 className="text-sm font-bold text-white mb-4">
-              Recent Queue History
-            </h3>
-
-            {history.length === 0 ? (
-
-              <p className="text-xs text-slate-400">
-                No queue history yet.
-              </p>
-
-            ) : (
-
-              <div className="space-y-3">
-
-                {history.slice(0, 5).map((item, index) => (
-
-                  <div
-                    key={item.id || index}
-                    className="p-3 rounded-lg bg-slate-950 border border-slate-800"
-                  >
-
-                    <div className="flex justify-between">
-
-                      <span className="text-sm font-bold text-cyan-400">
-                        {item.token_number}
-                      </span>
-
-                      <span className="text-xs text-slate-400">
-                        {item.status}
-                      </span>
-
-                    </div>
-
-                    <p className="text-xs text-slate-400 mt-1">
-                      {item.service_name ||
-                        item.service?.name ||
-                        'Service'}
+              return (
+                <div className="grid gap-4 md:grid-cols-3">
+                  <div className="rounded-lg bg-gray-50 p-5">
+                    <p className="text-sm text-gray-500">
+                      Currently Serving
                     </p>
-
+                    <p className="mt-2 text-2xl font-bold">
+                      {myService.currently_serving_token || '—'}
+                    </p>
                   </div>
 
-                ))}
+                  <div className="rounded-lg bg-gray-50 p-5">
+                    <p className="text-sm text-gray-500">
+                      People Waiting
+                    </p>
+                    <p className="mt-2 text-2xl font-bold">
+                      {myService.waiting_count ?? 0}
+                    </p>
+                  </div>
 
-              </div>
+                  <div className="rounded-lg bg-gray-50 p-5">
+                    <p className="text-sm text-gray-500">
+                      Service
+                    </p>
+                    <p className="mt-2 text-2xl font-bold">
+                      {myService.name || 'Active'}
+                    </p>
+                  </div>
+                </div>
+              );
+            })()
+          ) : activeToken ? (
+            <p className="text-gray-500">Loading queue status...</p>
+          ) : (
+            <p className="text-gray-500">
+              Join a queue to see your live status.
+            </p>
+          )}
+        </div>
 
-            )}
+        {/* Services */}
+        <div className="mb-8">
+          <h2 className="mb-4 text-xl font-semibold text-gray-900">
+            Available Services
+          </h2>
 
-          </div>
+          {services.length === 0 ? (
+            <div className="rounded-xl bg-white p-8 text-center shadow">
+              <p className="text-gray-500">
+                No services are currently available.
+              </p>
 
+              <p className="mt-2 text-sm text-gray-400">
+                An administrator needs to create an active service.
+              </p>
+            </div>
+          ) : (
+            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+              {services.map((service) => (
+                <div
+                  key={service.id}
+                  className="rounded-xl bg-white p-6 shadow transition hover:shadow-lg"
+                >
+                  <h3 className="text-xl font-semibold text-gray-900">
+                    {service.name}
+                  </h3>
+
+                  <p className="mt-2 text-gray-600">
+                    {service.description ||
+                      'Queue service available.'}
+                  </p>
+
+                  <div className="mt-4 space-y-2 text-sm text-gray-500">
+                    <p>
+                      <strong>Token Prefix:</strong>{' '}
+                      {service.prefix}
+                    </p>
+
+                    <p>
+                      <strong>Average Time:</strong>{' '}
+                      {service.average_service_time} minutes
+                    </p>
+
+                    <p>
+                      <strong>People in Queue:</strong>{' '}
+                      {service.active_tokens_count ?? 0}
+                    </p>
+                  </div>
+
+                  <button
+                    disabled={joining || !!activeToken}
+                    onClick={() => joinQueue(service.id)}
+                    className="mt-5 w-full rounded-lg bg-blue-600 px-4 py-3 font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-400"
+                  >
+                    {activeToken
+                      ? 'Already in Queue'
+                      : joining
+                      ? 'Joining...'
+                      : 'Join Queue'}
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* History */}
+        <div className="rounded-xl bg-white p-6 shadow">
+          <h2 className="mb-4 text-xl font-semibold text-gray-900">
+            Queue History
+          </h2>
+
+          {(Array.isArray(history) ? history : []).length === 0 ? (
+            <p className="text-gray-500">
+              No queue history yet.
+            </p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left">
+                <thead>
+                  <tr className="border-b">
+                    <th className="p-3">Token</th>
+                    <th className="p-3">Service</th>
+                    <th className="p-3">Status</th>
+                    <th className="p-3">Date</th>
+                  </tr>
+                </thead>
+
+                <tbody>
+                  {(Array.isArray(history) ? history : []).map((item, index) => (
+                    <tr
+                      key={item.id || index}
+                      className="border-b last:border-b-0"
+                    >
+                      <td className="p-3 font-medium">
+                        {item.token_number ||
+                          item.token ||
+                          '—'}
+                      </td>
+
+                      <td className="p-3">
+                        {item.service_name ||
+                          item.service?.name ||
+                          '—'}
+                      </td>
+
+                      <td className="p-3">
+                        {item.status || '—'}
+                      </td>
+
+                      <td className="p-3">
+                        {item.created_at
+                          ? new Date(
+                              item.created_at
+                            ).toLocaleString()
+                          : '—'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
 
       </div>
-
     </div>
   );
 };

@@ -20,6 +20,7 @@ const AdminDashboard = () => {
 
   const [healthStatus, setHealthStatus] = useState(null);
   const [services, setServices] = useState([]);
+  const [analytics, setAnalytics] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
@@ -32,13 +33,15 @@ const AdminDashboard = () => {
     try {
       setError("");
 
-      const [healthResponse, servicesResponse] = await Promise.all([
+      const [healthResponse, servicesResponse, analyticsResponse] = await Promise.all([
         api.get("/health/"),
         api.get("/services/"),
+        api.get("/queue/analytics/"),
       ]);
 
       setHealthStatus(healthResponse.data);
       setServices(servicesResponse.data || []);
+      setAnalytics(analyticsResponse.data);
     } catch (err) {
       console.error("Admin dashboard error:", err);
 
@@ -282,6 +285,98 @@ const AdminDashboard = () => {
 
       {/* Service Overview */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+
+        {/* Analytics Section */}
+        <div className="lg:col-span-3 mb-8">
+          <div className="glass-card p-6">
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h2 className="text-xl font-bold text-white">Queue Analytics</h2>
+                <p className="text-xs text-slate-400">Performance and usage metrics</p>
+              </div>
+              <Activity className="w-6 h-6 text-purple-400" />
+            </div>
+
+            {analytics ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                {/* Avg Wait Time */}
+                <div className="space-y-4">
+                  <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-wider">Avg Wait Time</h3>
+                  <div className="space-y-2">
+                    {analytics.avg_wait_times.map((item, i) => (
+                      <div key={i} className="flex justify-between items-center p-2 rounded-lg bg-slate-950/50 border border-slate-800">
+                        <span className="text-xs text-slate-400">{item.service}</span>
+                        <span className="text-xs font-bold text-indigo-400">{item.avg_wait_time}m</span>
+                      </div>
+                    ))}
+                    {analytics.avg_wait_times.length === 0 && <p className="text-xs text-slate-500 italic">No data available</p>}
+                  </div>
+                </div>
+
+                {/* Service Volume (Simple Bar Chart) */}
+                <div className="space-y-4">
+                  <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-wider">Total Volume</h3>
+                  <div className="space-y-3">
+                    {analytics.service_volume.map((item, i) => {
+                      const max = Math.max(...analytics.service_volume.map(v => v.count), 1);
+                      const width = (item.count / max) * 100;
+                      return (
+                        <div key={i} className="space-y-1">
+                          <div className="flex justify-between text-[10px] text-slate-400">
+                            <span>{item.service}</span>
+                            <span>{item.count}</span>
+                          </div>
+                          <div className="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden">
+                            <div
+                              className="h-full bg-cyan-500 transition-all duration-500"
+                              style={{ width: `${width}%` }}
+                            />
+                          </div>
+                        </div>
+                      );
+                    })}
+                    {analytics.service_volume.length === 0 && <p className="text-xs text-slate-500 italic">No data available</p>}
+                  </div>
+                </div>
+
+                {/* Daily Throughput */}
+                <div className="space-y-4">
+                  <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-wider">Daily Throughput</h3>
+                  <div className="space-y-2">
+                    {analytics.daily_throughput.map((item, i) => (
+                      <div key={i} className="flex justify-between items-center p-2 rounded-lg bg-slate-950/50 border border-slate-800">
+                        <span className="text-xs text-slate-400">{item.date}</span>
+                        <span className="text-xs font-bold text-emerald-400">{item.count}</span>
+                      </div>
+                    ))}
+                    {analytics.daily_throughput.length === 0 && <p className="text-xs text-slate-500 italic">No data available</p>}
+                  </div>
+                </div>
+
+                {/* Busiest Hours */}
+                <div className="space-y-4">
+                  <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-wider">Peak Hours</h3>
+                  <div className="grid grid-cols-4 gap-2">
+                    {analytics.hourly_distribution.map((item, i) => (
+                      <div key={i} className="flex flex-col items-center p-2 rounded-lg bg-slate-950/50 border border-slate-800">
+                        <span className="text-[10px] text-slate-500">{item.hour}:00</span>
+                        <span className="text-xs font-bold text-purple-400">{item.count}</span>
+                      </div>
+                    ))}
+                    {analytics.hourly_distribution.length === 0 && <p className="text-xs text-slate-500 italic col-span-4 text-center">No data available</p>}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="text-center py-10 text-slate-500 italic">
+                Loading analytics data...
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Service Overview */}
+
 
         {/* Service Table */}
         <div className="lg:col-span-2">

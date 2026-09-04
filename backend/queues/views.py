@@ -18,7 +18,7 @@ from queues.calculator import (
     generate_token_number
 )
 from services.models import Service
-from accounts.permissions import IsStaffOrAdmin
+from accounts.permissions import IsStaffOrAdmin, IsAdminRole
 
 
 class JoinQueueView(APIView):
@@ -614,3 +614,77 @@ class RecallTokenView(APIView):
             "token":
                 QueueTokenSerializer(token).data
         }, status=status.HTTP_200_OK)
+class AnalyticsView(APIView):
+    """
+    GET /api/queue/analytics/
+    Provides administrative metrics for queue performance and usage.
+    Admin only.
+    """
+    permission_classes = [IsAdminRole]
+
+    def get(self, request):
+        from django.db.models import Count, Avg, F
+        from django.db.models.functions import ExtractHour, TruncDate
+
+        # 1. Average Wait Time per Service (for completed tokens)
+        wait_times = QueueToken.objects.filter(
+            status=QueueStatus.COMPLETED
+        ).values('service__name').annotate(
+            avg_wait=Avg(F('completed_at') - F('joined_at'))
+        )
+
+        service_wait_metrics = []
+        for item in wait_times:
+            wait_delta = item['avg_wait']
+            minutes = 0
+            if wait_delta:
+                minutes = int(wait_delta.total_seconds() / 60)
+            service_wait_metrics.append({
+                "service": item['service__name'],
+                "avg_wait_time": minutes
+            })
+
+        # 2. Throughput: Tokens completed per day (last 7 days)
+        throughput = QueueToken.objects.filter(
+            status=QueueStatus.COMPLETED
+        ).annotate(
+            date=TruncDate('completed_at')
+        ).values('date').annotate(
+            count=Count('id')
+        ).order_by('-date')[:7]
+
+        daily_throughput = [
+            {"date": item['date'].strftime('%Y-%m-%d'), "count": item['count']}
+            for item in throughput
+        ]
+
+        # 3. Busiest Hours (distribution of joins)
+        busiest_hours = QueueToken.objects.annotate(
+            hour=ExtractHour('joined_at')
+        ).values('hour').annotate(
+            count=Count('id')
+        ).order_by('hour')
+
+        hourly_distribution = [
+            {"hour": item['hour'], "count": item['count']}
+            for item in busiest_hours
+        ]
+
+        # 4. Busiest Services (total volume)
+        service_volume = QueueToken.objects.values(
+            'service__name'
+        ).annotate(
+            count=Count('id')
+        ).order_by('-count')
+
+        volume_metrics = [
+            {"service": item['service__name'], "count": item['count']}
+            for item in service_volume
+        ]
+
+        return Response({
+            "avg_wait_times": service_wait_metrics,
+            "daily_throughput": daily_throughput,
+            "hourly_distribution": hourly_distribution,
+            "service_volume": volume_metrics,
+        }, status=200)

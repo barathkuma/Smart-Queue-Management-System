@@ -116,7 +116,7 @@ export const LoginPage = () => {
           {/* Login Form */}
           <form className="space-y-4" onSubmit={handleSubmit}>
             <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+              <label className="block text-xs font-semibold text-slate-300 mb-1.5" htmlFor="login-email">
                 Email Address
               </label>
               <div className="relative">
@@ -125,6 +125,7 @@ export const LoginPage = () => {
                 </div>
                 <input
                   type="email"
+                  id="login-email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="alex@smartqueue.com"
@@ -136,7 +137,7 @@ export const LoginPage = () => {
 
             <div>
               <div className="flex items-center justify-between mb-1.5">
-                <label className="block text-xs font-semibold text-slate-300">
+                <label className="block text-xs font-semibold text-slate-300" htmlFor="login-password">
                   Password
                 </label>
                 <span className="text-xs text-indigo-400 hover:underline cursor-pointer">
@@ -149,6 +150,7 @@ export const LoginPage = () => {
                 </div>
                 <input
                   type={showPassword ? 'text' : 'password'}
+                  id="login-password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"

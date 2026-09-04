@@ -225,3 +225,55 @@ class QueueAPITests(APITestCase):
         recall_res = self.client.post(self.recall_url, {'token_id': call2_res.data['token']['id']})
         self.assertEqual(recall_res.status_code, status.HTTP_200_OK)
         self.assertEqual(recall_res.data['token']['status'], 'CALLED')
+
+    def test_admin_analytics_access(self):
+        # Create an admin user
+        admin_user = User.objects.create_user(
+            email='admin@smartqueue.com',
+            name='Admin User',
+            password='password123',
+            role=UserRole.ADMIN
+        )
+        analytics_url = reverse('queues:queue_analytics')
+
+        # 1. Admin can access
+        self.client.force_authenticate(user=admin_user)
+        res_admin = self.client.get(analytics_url)
+        self.assertEqual(res_admin.status_code, status.HTTP_200_OK)
+
+        # 2. Customer cannot access
+        self.client.force_authenticate(user=self.customer1)
+        res_cust = self.client.get(analytics_url)
+        self.assertEqual(res_cust.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_analytics_data_accuracy(self):
+        # Setup data for analytics
+        admin_user = User.objects.create_user(
+            email='admin2@smartqueue.com',
+            name='Admin 2',
+            password='password123',
+            role=UserRole.ADMIN
+        )
+        self.client.force_authenticate(user=admin_user)
+        analytics_url = reverse('queues:queue_analytics')
+
+        # Create a completed token to test avg wait time
+        now = timezone.now()
+        QueueToken.objects.create(
+            token_number='A-100',
+            user=self.customer1,
+            service=self.service_a,
+            status=QueueStatus.COMPLETED,
+            joined_at=now - timedelta(minutes=20),
+            completed_at=now # wait time = 20 min
+        )
+
+        res = self.client.get(analytics_url)
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+
+        # Check if A-001 (General Consultation) has avg_wait_time = 20
+        wait_metrics = res.data['avg_wait_times']
+        service_metric = next((m for m in wait_metrics if m['service'] == self.service_a.name), None)
+        self.assertIsNotNone(service_metric)
+        self.assertEqual(service_metric['avg_wait_time'], 20)
+

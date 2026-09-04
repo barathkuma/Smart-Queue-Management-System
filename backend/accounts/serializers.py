@@ -23,15 +23,10 @@ class UserRegisterSerializer(serializers.ModelSerializer):
         style={'input_type': 'password'},
         help_text='Minimum 6 characters.'
     )
-    role = serializers.ChoiceField(
-        choices=UserRole.choices,
-        default=UserRole.USER,
-        required=False
-    )
 
     class Meta:
         model = User
-        fields = ('id', 'email', 'name', 'phone', 'role', 'password')
+        fields = ('id', 'email', 'name', 'phone', 'password')
 
     def validate_email(self, value):
         normalized_email = value.strip().lower()
@@ -47,8 +42,7 @@ class UserRegisterSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         password = validated_data.pop('password')
-        role = validated_data.get('role', UserRole.USER)
-        
+
         # Staff users created through standard registration have is_staff=False by default (for django admin)
         # but role='STAFF' for application portal logic
         user = User.objects.create_user(

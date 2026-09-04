@@ -9,7 +9,8 @@ from queues.views import (
     StartServingView,
     CompleteServiceView,
     SkipTokenView,
-    RecallTokenView
+    RecallTokenView,
+    AnalyticsView
 )
 
 app_name = 'queues'
@@ -28,4 +29,5 @@ urlpatterns = [
     path('complete/', CompleteServiceView.as_view(), name='complete_service'),
     path('skip/', SkipTokenView.as_view(), name='skip_token'),
     path('recall/', RecallTokenView.as_view(), name='recall_token'),
+    path('analytics/', AnalyticsView.as_view(), name='queue_analytics'),
 ]

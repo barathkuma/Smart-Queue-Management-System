@@ -161,9 +161,8 @@ export const RegisterPage = () => {
               </div>
             </div>
 
-            {/* Full Name */}
             <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+              <label className="block text-xs font-semibold text-slate-300 mb-1.5" htmlFor="reg-name">
                 Full Name
               </label>
               <div className="relative">
@@ -172,6 +171,7 @@ export const RegisterPage = () => {
                 </div>
                 <input
                   type="text"
+                  id="reg-name"
                   name="name"
                   value={formData.name}
                   onChange={handleChange}
@@ -185,7 +185,7 @@ export const RegisterPage = () => {
             {/* Email & Phone */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5" htmlFor="reg-email">
                   Email Address
                 </label>
                 <div className="relative">
@@ -194,6 +194,7 @@ export const RegisterPage = () => {
                   </div>
                   <input
                     type="email"
+                    id="reg-email"
                     name="email"
                     value={formData.email}
                     onChange={handleChange}
@@ -205,7 +206,7 @@ export const RegisterPage = () => {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5" htmlFor="reg-phone">
                   Phone (Optional)
                 </label>
                 <div className="relative">
@@ -214,6 +215,7 @@ export const RegisterPage = () => {
                   </div>
                   <input
                     type="tel"
+                    id="reg-phone"
                     name="phone"
                     value={formData.phone}
                     onChange={handleChange}
@@ -227,7 +229,7 @@ export const RegisterPage = () => {
             {/* Passwords */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5" htmlFor="reg-password">
                   Password
                 </label>
                 <div className="relative">
@@ -236,6 +238,7 @@ export const RegisterPage = () => {
                   </div>
                   <input
                     type="password"
+                    id="reg-password"
                     name="password"
                     value={formData.password}
                     onChange={handleChange}
@@ -248,7 +251,7 @@ export const RegisterPage = () => {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5" htmlFor="reg-confirm-password">
                   Confirm Password
                 </label>
                 <div className="relative">
@@ -257,6 +260,7 @@ export const RegisterPage = () => {
                   </div>
                   <input
                     type="password"
+                    id="reg-confirm-password"
                     name="confirmPassword"
                     value={formData.confirmPassword}
                     onChange={handleChange}
