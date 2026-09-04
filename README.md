@@ -13,14 +13,14 @@ A production-grade, full-stack Smart Queue Management System built with a decoup
 |---|---|---|---|
 | **Phase 1** | **Foundation & Auth** | Backend Setup, Custom User Model, JWT Auth, Role Permissions, React Frontend & AuthContext | ✅ **Completed** |
 | **Phase 2** | **Services & Queue Engine** | Service Categories, Counter Controls, Token Engine (`A-001`, `B-024`), FIFO Ordering, Live Status | ✅ **Completed** |
-| **Phase 3** | **User Queue Experience** | Live Queue Position Tracking, Estimated Wait Times, Interactive Progress Bar | 🎯 *Next* |
-| **Phase 4** | **Staff Queue Control** | Staff Counter Portal (Call Next, Start Serving, Complete, Skip, Recall) | Planned |
-| **Phase 5** | **Admin Console** | User & Staff Management, Service Config, Counter Allocations, System Logs | Planned |
+| **Phase 3** | **User Queue Experience** | Queue position, estimated wait time, active-token status, and queue-status views | ✅ **Completed** |
+| **Phase 4** | **Staff Queue Control** | Staff dashboard with Call Next, Start Serving, Complete, Skip, and Recall actions | ✅ **Completed** |
+| **Phase 5** | **Admin Console** | Admin dashboard, service management, queue overview, and system health view | ✅ **Completed** |
 | **Phase 6** | **Live Notifications** | Turn Approaching Alerts, Sound Chimes, Position Drift Notifications | Planned |
-| **Phase 7** | **Analytics & Reports** | Peak Hours Analysis, Service Latency, Wait-time Trends using Recharts | Planned |
-| **Phase 8** | **UI/UX Polish** | Glassmorphism, Micro-animations, Dark/Light SaaS Themes, Sound Effects | Planned |
-| **Phase 9** | **E2E Testing** | Full Automated Test Suite (DRF APITestCase + Component Validation) | Planned |
-| **Phase 10** | **Demo Seed Data & Docs** | Comprehensive Seed Script (Sample Services, Staff, Queues) & API Documentation | Planned |
+| **Phase 7** | **Analytics & Reports** | Average wait time, service volume, daily throughput, and peak-hours metrics | ✅ **Completed** |
+| **Phase 8** | **UI/UX Polish** | Glass-style admin interface and interface transitions; theme switching and sound effects remain future work | 🟡 **In Progress** |
+| **Phase 9** | **Automated Testing** | Django API tests and Playwright end-to-end test coverage; full E2E execution remains environment-dependent | 🟡 **In Progress** |
+| **Phase 10** | **Demo Seed Data & Docs** | Demo services, users, and queue records via `seed_data`, plus README setup and API documentation | ✅ **Completed** |
 
 ---
 
